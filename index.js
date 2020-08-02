@@ -1,5 +1,4 @@
 let polylabel = require('@mapbox/polylabel');
-let netherlands = require("./netherlands.json");
 let dbconfig = require("./config.json");
 let pgPromise = require("pg-promise");
 let QueryStream = require('pg-query-stream');
@@ -117,9 +116,9 @@ async function addOrUpdateLabelPoint(schemaname, tablename, idField, polygonFiel
         console.error(err.message);
         process.exit(1);
     }
-    let schemaname = "geotag";
-    let tablename = "gt_gemeenteperceelsectie";
-    let idField = "id";
+    let schemaname = "france";
+    let tablename = "departement";
+    let idField = "ogc_fid";
     let polygonField = "geom";
     let labelPointfield = "labelpoint";
     await addOrUpdateLabelPoint(schemaname, tablename, idField, polygonField, labelPointfield);
