@@ -1,0 +1,10 @@
+{
+    "connection": {
+        "host": "dbhost.example.org",
+        "port": 5432,
+        "database": "mydatabase",
+        "user": "myusername",
+        "password": "mypassword"
+    },
+    "schema": ["public"]
+}

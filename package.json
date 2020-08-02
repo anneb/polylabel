@@ -1,0 +1,22 @@
+{
+  "name": "polylabel",
+  "version": "1.0.0",
+  "description": "Calculate polylabel points for postgres polygons",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@mapbox/polylabel": "^1.0.2",
+    "batched-stream": "^1.0.0",
+    "perf_hooks": "0.0.1",
+    "pg-promise": "^10.5.8",
+    "pg-query-stream": "^3.2.0",
+    "proj4": "^2.6.2",
+    "stream": "0.0.2",
+    "through": "^2.3.8"
+  }
+}
