@@ -5,6 +5,7 @@ Possibly usable as skeleton for future external PostGIS record by record calcula
 ### Requirements
 * git
 * npm / node
+* PostGIS database
 
 ### Installation
 ```
