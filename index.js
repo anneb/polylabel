@@ -6,6 +6,8 @@ let through = require('through');
 let sqlLargestPart = require("./sqllargestpart.js");
 let fs = require("fs");
 let proj4 = require("proj4");
+const BatchStream = require('batched-stream');
+let { Writable } = require('stream');
 
 const pgp = pgPromise({
     schema: dbconfig.schema
@@ -83,6 +85,83 @@ async function uploadGeoJSONTable(filename, schemaname, tablename, idField, labe
 }
 
 
+async function addOrUpdateLabelPoint2(schemaname, tablename, idField, polygonField, labelPointField) {
+    const batchsize = 1000;
+
+    sql = `drop table if exists "${schemaname}"."${tablename}_${labelPointField}"`;
+    await db.none(sql);
+    sql = `create table "${schemaname}"."${tablename}_${labelPointField}" ("${idField}" int, "${labelPointField}" geometry(Point,4326))`;
+    await db.none(sql);  
+    
+    const recordMapper = (record) => {
+        let result = {};
+        result[idField] = record[idField];
+        let inputGeometry = JSON.parse(record.geojson);
+        let outputGeometry = {type:"Point"};
+        outputGeometry.coordinates = worldMercatorToGPS.forward(polylabel(inputGeometry.coordinates));
+        result[labelPointField] = `st_setsrid(st_geomfromgeojson('${JSON.stringify(outputGeometry)}'),4326)`;
+        return result;
+    }
+
+    let columnSet = new pgp.helpers.ColumnSet([
+        {name: 'id', prop: 'id'},
+        {name: labelPointField, prop: labelPointField}
+    ], {
+        table: {table: `${tablename}_${labelPointField}`, schema: schemaname}
+    });
+    
+    await new Promise((resolve,reject)=>{
+        let sql = `select "${idField}" as id, st_asgeojson(st_transform(LargestPart("${polygonField}"),3857)) as geojson from "${schemaname}"."${tablename}"`;
+        const queryStream = new QueryStream(sql);
+
+        const batch = new BatchStream({size : batchsize, objectMode: true, strictMode: false});
+
+        let insertDatabase = new Writable({
+            objectMode:true, 
+            write(records, encoding, callback){
+                (async ()=>{
+                    try {
+                        records = records.map(record=>recordMapper(record));
+                        //let sql = pgp.helpers.insert(records, columnSet);
+                        let sql = `insert into "${schemaname}"."${tablename}_${labelPointField}" ("${idField}","${labelPointField}") values ${records.map(record=>`(${record.id},${record[labelPointField]})`).join(',')}`
+                        await db.none(sql);
+                    } catch(err) {
+                        return callback(err);
+                    }
+                    callback();
+                })();
+            }
+        });
+        db.stream(queryStream, stream=>{
+            stream.pipe(batch)
+            .pipe(insertDatabase)
+            .on('finish', ()=>{
+                resolve()}
+            )
+            .on('error', (error)=>{
+                console.log(`error ${error.message}`);
+                reject(error)
+            })
+        });
+    });
+    sql = `alter table "${schemaname}"."${tablename}" add column "${labelPointField}" geometry(Point,4326)`;
+    try {
+        await db.none(sql);
+    } catch (err) {
+        // ignore, 'add colum if not exists' seems buggy?'
+    }
+    sql = `drop index if exists "${schemaname}"."${tablename}_${schemaname}"`;
+    await db.none(sql);
+    sql = `update "${schemaname}"."${tablename}" set "${labelPointField}"=l."${labelPointField}" from "${schemaname}"."${tablename}_${labelPointField}" l where "${schemaname}"."${tablename}"."${idField}"=l.${idField}`
+    await db.none(sql);
+    sql = `create index if not exists "${tablename}_${labelPointField}" on "${schemaname}"."${tablename}" using gist("${labelPointField}");`
+    await db.none(sql);
+    sql = `drop table if exists "${schemaname}"."${tablename}_${labelPointField}"`;
+    await db.none(sql);
+}
+
+
+
 async function addOrUpdateLabelPoint(schemaname, tablename, idField, polygonField, labelPointField) {
     try {
         let sql = `select "${idField}" as id, st_asgeojson(st_transform(LargestPart("${polygonField}"),3857)) as geojson from "${schemaname}"."${tablename}"`;
@@ -116,12 +195,13 @@ async function addOrUpdateLabelPoint(schemaname, tablename, idField, polygonFiel
         console.error(err.message);
         process.exit(1);
     }
-    let schemaname = "france";
-    let tablename = "departement";
-    let idField = "ogc_fid";
+    let schemaname = "geotag";
+    let tablename = "gt_buurt";
+    let idField = "id";
     let polygonField = "geom";
     let labelPointfield = "labelpoint";
-    await addOrUpdateLabelPoint(schemaname, tablename, idField, polygonField, labelPointfield);
+    //await addOrUpdateLabelPoint(schemaname, tablename, idField, polygonField, labelPointfield);
+    await addOrUpdateLabelPoint2(schemaname, tablename, idField, polygonField, labelPointfield);
     process.exit(0);
 })();
 
