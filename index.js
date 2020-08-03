@@ -20,12 +20,15 @@ proj4.defs([
 
 let worldMercatorToGPS = proj4("EPSG:3857", "EPSG:4326");
 
-async function addOrUpdateLabelPoint(schemaname, tablename, idField, polygonField, labelPointField) {
+async function addOrUpdateLabelPoint(schemaname, tablename, idField, polygonField, labelPointField, tempTableName) {
     const batchsize = 1000;
+    if (!tempTableName) {
+        tempTableName = `tmp_${tablename}_${labelPointField}`
+    }
 
-    sql = `drop table if exists "${schemaname}"."${tablename}_${labelPointField}"`;
+    sql = `drop table if exists "${schemaname}"."${tempTableName}"`;
     await db.none(sql);
-    sql = `create table "${schemaname}"."${tablename}_${labelPointField}" ("${idField}" int, "${labelPointField}" geometry(Point,4326))`;
+    sql = `create table "${schemaname}"."${tempTableName}" ("${idField}" int, "${labelPointField}" geometry(Point,4326))`;
     await db.none(sql);  
     
     const recordMapper = (record) => {
@@ -51,7 +54,7 @@ async function addOrUpdateLabelPoint(schemaname, tablename, idField, polygonFiel
                     try {
                         records = records.map(record=>recordMapper(record));
                         //let sql = pgp.helpers.insert(records, columnSet);
-                        let sql = `insert into "${schemaname}"."${tablename}_${labelPointField}" ("${idField}","${labelPointField}") values ${records.map(record=>`(${record.id},${record[labelPointField]})`).join(',')}`
+                        let sql = `insert into "${schemaname}"."${tempTableName}" ("${idField}","${labelPointField}") values ${records.map(record=>`(${record.id},${record[labelPointField]})`).join(',')}`
                         await db.none(sql);
                     } catch(err) {
                         return callback(err);
@@ -76,15 +79,15 @@ async function addOrUpdateLabelPoint(schemaname, tablename, idField, polygonFiel
     try {
         await db.none(sql);
     } catch (err) {
-        // ignore, 'add colum if not exists' seems buggy?'
+        // ignore, 'add column if not exists' seems buggy?'
     }
-    sql = `drop index if exists "${schemaname}"."${tablename}_${schemaname}"`;
+    sql = `drop index if exists "${schemaname}"."${tablename}_${labelPointField}"`;
     await db.none(sql);
-    sql = `update "${schemaname}"."${tablename}" set "${labelPointField}"=l."${labelPointField}" from "${schemaname}"."${tablename}_${labelPointField}" l where "${schemaname}"."${tablename}"."${idField}"=l.${idField}`
+    sql = `update "${schemaname}"."${tablename}" set "${labelPointField}"=l."${labelPointField}" from "${schemaname}"."${tempTableName}" l where "${schemaname}"."${tablename}"."${idField}"=l.${idField}`
     await db.none(sql);
     sql = `create index if not exists "${tablename}_${labelPointField}" on "${schemaname}"."${tablename}" using gist("${labelPointField}");`
     await db.none(sql);
-    sql = `drop table if exists "${schemaname}"."${tablename}_${labelPointField}"`;
+    sql = `drop table if exists "${schemaname}"."${tempTableName}"`;
     await db.none(sql);
 }
 
