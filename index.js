@@ -7,9 +7,63 @@ const BatchStream = require('batched-stream');
 let { Writable } = require('stream');
 
 let polylabel = require('@mapbox/polylabel');
+const { toLowerCase } = require("./sqllargestpart.js");
+
+cliArgs = process.argv.slice(2);
+let hasTableArgument = false;
+for (arg of cliArgs) {
+    arg = arg.split('=');
+    switch (arg[0].toLowerCase()) {
+        case 'schema': 
+            dbconfig.schema = arg[1];
+            break;
+        case 'table': 
+            dbconfig.table = arg[1];
+            hasTableArgument = true;
+            break;
+        case 'labelpointfield':
+            dbconfig.labelPointField = arg[1];
+            break;
+        case 'polygonfield':
+            dbconfig.polygonField = arg[1];
+            break;
+        case 'idfield':
+            dbconfig.idField = arg[1];
+            break;
+        case 'temptablename':
+            dbconfig.tempTableName = arg[1];
+            if (dbconfig.tempTableName.toLowerCase() == 'null' || dbconfig.tempTableName.toLowerCase == 'undefined' || dbconfig.tempTableName == '') {
+                dbconfig.tempTableName = null;
+            }
+            break;
+        case 'help':
+        case '-help':
+        case '--help':
+        case '-h':
+        case '-?':
+        case '--?':
+        case '/?':
+        case '/h':
+            usage();
+            process.exit(0);
+        default:
+            console.error(`command line argument not recognized: '${arg[0]}'\nshould be one of 'schema=', 'table=', 'labelPointField=', 'polygonField=', 'idField=', 'tempTableName=`);
+            process.exit(1);
+    }
+}
+
+function usage()
+{
+    console.log(`\nusage:\nnode ${__filename} table=tablename\noptional parameters: schema=${dbconfig.schema}, labelPointField=${dbconfig.labelPointField}, polygonField=${dbconfig.polygonField}, idField=${dbconfig.idField}, tempTableName=${dbconfig.tempTableName}\nSee config.json for database connection parameters\n`);
+}
+
+if (!hasTableArgument) {
+    usage();
+    process.exit(1);
+}
 
 const pgp = pgPromise({
-    schema: dbconfig.schema
+    schema: dbconfig.schema === 'public' ? [dbconfig.schema] : [dbconfig.schema, 'public']
 })
 const db = pgp(dbconfig.connection);
 console.log(`dbhost: ${dbconfig.connection.host}, dbname: ${dbconfig.connection.database}`);
@@ -41,7 +95,8 @@ async function addOrUpdateLabelPoint(schemaname, tablename, idField, polygonFiel
             result[idField] = record[idField];
             let inputGeometry = JSON.parse(record.geojson);
             let outputGeometry = {type:"Point"};
-            outputGeometry.coordinates = worldMercatorToGPS.forward(polylabel(inputGeometry.coordinates));
+            let labelPoint = polylabel(inputGeometry.coordinates, 50);
+            outputGeometry.coordinates = worldMercatorToGPS.forward(labelPoint);
             result[labelPointField] = `st_setsrid(st_geomfromgeojson('${JSON.stringify(outputGeometry)}'),4326)`;
             return result;
         }
@@ -119,13 +174,8 @@ async function addOrUpdateLabelPoint(schemaname, tablename, idField, polygonFiel
         console.error(err.message);
         process.exit(1);
     }
-    let schemaname = "geotag";
-    let tablename = "gt_buurtlw";
-    let idField = "id";
-    let polygonField = "geom";
-    let labelPointfield = "labelpoint";
     try{
-        await addOrUpdateLabelPoint(schemaname, tablename, idField, polygonField, labelPointfield);
+        await addOrUpdateLabelPoint(dbconfig.schema, dbconfig.table, dbconfig.idField, dbconfig.polygonField, dbconfig.labelPointField, dbconfig.tempTableName);
     } catch (error) {
         console.log(`update Error ${error.message}`);
     }

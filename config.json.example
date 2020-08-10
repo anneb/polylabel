@@ -6,5 +6,9 @@
         "user": "myusername",
         "password": "mypassword"
     },
-    "schema": ["public"]
+    "schema": "public",
+    "labelPointField": "labelpoint",
+    "polygonField": "geom",
+    "idField": "id",
+    "tempTableName": null
 }
