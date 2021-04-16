@@ -104,7 +104,7 @@ async function addOrUpdateLabelPoint(schemaname, tablename, idField, polygonFiel
         escapeName = (name) => name.toString().replace(/"/g, '""');
 
         await new Promise((resolve,reject)=>{
-            let sql = `select "${escapeName(idField)}" as id, st_asgeojson(st_transform(LargestPart("${escapeName(polygonField)}"),3857)) as geojson from "${escapeName(schemaname)}"."${escapeName(tablename)}"`;
+            let sql = `select "${escapeName(idField)}", st_asgeojson(st_transform(LargestPart("${escapeName(polygonField)}"),3857)) as geojson from "${escapeName(schemaname)}"."${escapeName(tablename)}"`;
             const queryStream = new QueryStream(sql);
 
             const batch = new BatchStream({size : batchsize, objectMode: true, strictMode: false});
@@ -141,8 +141,16 @@ async function addOrUpdateLabelPoint(schemaname, tablename, idField, polygonFiel
                 reject(new Error(`Stream error: ${error.message}`));
             });
         });
-        sql = 'alter table $(schemaname:name).$(tablename:name) add column if not exists $(labelPointField:name) geometry(Point,4326)';
-        await db.none(sql, sqlParams);
+        // "if not exists" not supported on postgres 9.5-
+        // sql = 'alter table $(schemaname:name).$(tablename:name) add column if not exists $(labelPointField:name) geometry(Point,4326)';
+        try {
+            sql = 'alter table $(schemaname:name).$(tablename:name) add column $(labelPointField:name) geometry(Point,4326)';
+            await db.none(sql, sqlParams);
+        } catch (err) {
+            // ignore exists error
+            console.log(`ignoring error message: ${err.message}`);
+        }
+        
         sqlParams.indexName = `${tablename}_${labelPointField}`
         sql = `drop index if exists $(schemaname:name).$(indexName:name)`;
         await db.none(sql, sqlParams);
