@@ -22,5 +22,15 @@ npm start
 The database connection parameters should be defined in file ```config.json```.   
 Copy file ```config.json.example``` to ```config.json``` and update the database connection parameters.
 
-Todo: schema, tablename, polygon geometry fieldname and label fieldname should become command line parameters
+### usage
+```
+# get usage info
+node index.js
+
+usage:
+node index.js table=tablename
+optional parameters: schema=public, labelPointField=labelpoint, polygonField=geom, idField=id, tempTableName=null
+See config.json for database connection parameters
+```
+
 
